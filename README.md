@@ -39,13 +39,13 @@ composer install
 Once installed, you can run the script from the command line:
 
 ```bash
-php vendor/rafafortes/cache-warmer/UrlFetcher.php <baseUrl> <sitemapUrl>
+php vendor/rafafortes/cache-warmer/src/UrlFetcher.php <baseUrl> <sitemapUrl>
 ```
 
 **Example:**
 
 ```bash
-php vendor/rafafortes/cache-warmer/UrlFetcher.php https://example.com https://example.com/sitemap.xml
+php vendor/rafafortes/cache-warmer/src/UrlFetcher.php https://example.com https://example.com/sitemap.xml
 ```
 
 ### Output

@@ -1,0 +1,12 @@
+{
+  "name": "rafafortes/cache-warmer",
+  "description": "A simple Magento 2 cache warmer tool.",
+  "autoload": {
+    "psr-4": {
+      "CacheWarmer\\": "src/"
+    }
+  },
+  "require": {
+    "php": ">=8.0"
+  }
+}

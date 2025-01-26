@@ -8,5 +8,6 @@
   },
   "require": {
     "php": ">=8.0"
-  }
+  },
+  "license": "MIT"
 }

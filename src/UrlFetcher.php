@@ -6,20 +6,25 @@ namespace CacheWarmer;
 class UrlFetcher {
     private array $internalUrls = [];
     private array $visitedUrls = [];
+    private array $skippedUrls = [];
+    private array $debugInfo = [];
     private string $baseUrl;
     private string $sitemapUrl;
+    private bool $debugMode;
 
-    public function __construct(string $baseUrl, string $sitemapUrl) {
+    public function __construct(string $baseUrl, string $sitemapUrl, bool $debugMode = false) {
         $this->baseUrl = $baseUrl;
         $this->sitemapUrl = $sitemapUrl;
+        $this->debugMode = $debugMode;
     }
 
     public function getInternalUrls(): array {
+        $this->internalUrls[] = $this->baseUrl;
         $this->fetchSitemapUrls();
-        $queue = array_merge([$this->baseUrl], $this->internalUrls);
+        $qtyUrls = 0;
 
-        while (!empty($queue)) {
-            $currentUrl = array_shift($queue);
+        while (!empty($this->internalUrls)) {
+            $currentUrl = array_shift($this->internalUrls);
 
             if ($this->shouldSkipUrl($currentUrl)) {
                 echo "Skipping file URL: $currentUrl\n";
@@ -28,11 +33,13 @@ class UrlFetcher {
 
             $normalizedUrl = parse_url($currentUrl, PHP_URL_PATH) . '?' . (parse_url($currentUrl, PHP_URL_QUERY) ?? '');
             if (in_array($normalizedUrl, $this->visitedUrls)) {
+                $this->skippedUrls[] = $currentUrl;
                 continue;
             }
             $this->visitedUrls[] = $normalizedUrl;
 
-            echo "Loading: $currentUrl\n";
+            echo "Loading URL #".$qtyUrls.": $currentUrl\n";
+            $qtyUrls++;
 
             $this->fetchUrlContent($currentUrl);
         }
@@ -82,40 +89,63 @@ class UrlFetcher {
 
         preg_match_all('/<a\s+href=["\']([^"\']+)["\']/i', $html, $matches);
 
-        foreach ($matches[1] as $url) {
-            $url = html_entity_decode($url, ENT_QUOTES, 'UTF-8');
-            $parsedUrl = parse_url($url);
+        if ($this->debugMode) {
+            $this->debugInfo[$url] = $matches[1];
+        }
+
+        foreach ($matches[1] as $foundUrl) {
+            $foundUrl = html_entity_decode($foundUrl, ENT_QUOTES, 'UTF-8');
+            $parsedUrl = parse_url($foundUrl);
             $parsedBaseUrl = parse_url($this->baseUrl);
 
             if (!isset($parsedUrl['host'])) {
-                $url = rtrim($this->baseUrl, '/') . '/' . ltrim($url, '/');
+                $foundUrl = rtrim($this->baseUrl, '/') . '/' . ltrim($foundUrl, '/');
             } elseif ($parsedUrl['host'] !== $parsedBaseUrl['host']) {
                 continue;
             }
 
-            if (!in_array($url, $this->internalUrls)) {
-                $this->internalUrls[] = $url;
+            if (!in_array($foundUrl, $this->internalUrls)) {
+                $this->internalUrls[] = $foundUrl;
             }
         }
+    }
+
+    public function getSkippedUrls(): array {
+        return $this->skippedUrls;
+    }
+
+    public function getDebugInfo(): array {
+        return $this->debugInfo;
     }
 }
 
 if ($argc < 3) {
-    die("Usage: php UrlFetcher.php <baseUrl> <sitemapUrl>\n");
+    die("Usage: php UrlFetcher.php <baseUrl> <sitemapUrl> [--debug]\n");
 }
 
 $startScriptTime = microtime(true);
 
 $baseUrl = $argv[1];
 $sitemapUrl = $argv[2];
+$debugMode = isset($argv[3]) && $argv[3] === '--debug';
 
-$urlFetcher = new UrlFetcher($baseUrl, $sitemapUrl);
+$urlFetcher = new UrlFetcher($baseUrl, $sitemapUrl, $debugMode);
 $urls = $urlFetcher->getInternalUrls();
 
 // Display found URLs
 print_r($urls);
 
 echo "Total URLs loaded: " . count($urls) . "\n";
+
+// Display skipped URLs
+$skippedUrls = $urlFetcher->getSkippedUrls();
+echo "Skipped duplicate URLs: " . count($skippedUrls) . "\n";
+print_r($skippedUrls);
+
+if ($debugMode) {
+    echo "\nDebug Information:\n";
+    print_r($urlFetcher->getDebugInfo());
+}
 
 $endScriptTime = microtime(true);
 $totalExecutionTime = $endScriptTime - $startScriptTime;

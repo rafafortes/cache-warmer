@@ -8,6 +8,7 @@ class UrlFetcher {
     private array $visitedUrls = [];
     private array $skippedUrls = [];
     private array $debugInfo = [];
+    private array $blacklistPatterns = [];
     private string $baseUrl;
     private string $sitemapUrl;
     private bool $debugMode;
@@ -16,6 +17,17 @@ class UrlFetcher {
         $this->baseUrl = $baseUrl;
         $this->sitemapUrl = $sitemapUrl;
         $this->debugMode = $debugMode;
+        $this->loadBlacklist();
+    }
+
+    private function loadBlacklist(): void {
+        $blacklistFile = __DIR__ . '/blacklist';
+        if (file_exists($blacklistFile)) {
+            $this->blacklistPatterns = array_filter(array_map('trim', file($blacklistFile)));
+            echo "Blacklist loaded with " . count($this->blacklistPatterns) . " patterns.\n";
+        } else {
+            echo "Blacklist file not found, proceeding without it.\n";
+        }
     }
 
     public function getInternalUrls(): array {
@@ -28,6 +40,11 @@ class UrlFetcher {
 
             if ($this->shouldSkipUrl($currentUrl)) {
                 echo "Skipping file URL: $currentUrl\n";
+                continue;
+            }
+
+            if ($this->isBlacklisted($currentUrl)) {
+                echo "Skipping blacklisted URL: $currentUrl\n";
                 continue;
             }
 
@@ -59,6 +76,15 @@ class UrlFetcher {
 
     private function shouldSkipUrl(string $url): bool {
         return (bool)preg_match('/\.(jpg|jpeg|png|gif|webp|svg|bmp|tiff|ico|pdf)$/i', $url);
+    }
+
+    private function isBlacklisted(string $url): bool {
+        foreach ($this->blacklistPatterns as $pattern) {
+            if (stripos($url, $pattern) !== false) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private function fetchUrlContent(string $url): void {
@@ -104,7 +130,7 @@ class UrlFetcher {
                 continue;
             }
 
-            if (!in_array($foundUrl, $this->internalUrls)) {
+            if (!in_array($foundUrl, $this->internalUrls) && !$this->isBlacklisted($foundUrl)) {
                 $this->internalUrls[] = $foundUrl;
             }
         }

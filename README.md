@@ -7,7 +7,9 @@ Cache Warmer is a PHP tool designed to crawl and cache all internal URLs of a Ma
 - Extracts URLs from the store's `sitemap.xml`.
 - Handles URL normalization and parameter variations.
 - Skips unwanted file types (e.g., images, PDFs).
+- Skips URLs based on a blacklist file with customizable patterns.
 - Displays real-time processing details such as response codes and load times.
+- **Debug mode:** Outputs all links found on each accessed page.
 
 ## Installation
 
@@ -39,7 +41,7 @@ composer install
 Once installed, you can run the script from the command line:
 
 ```bash
-php vendor/rafafortes/cache-warmer/src/UrlFetcher.php <baseUrl> <sitemapUrl>
+php vendor/rafafortes/cache-warmer/src/UrlFetcher.php <baseUrl> <sitemapUrl> [--debug]
 ```
 
 **Example:**
@@ -48,6 +50,26 @@ php vendor/rafafortes/cache-warmer/src/UrlFetcher.php <baseUrl> <sitemapUrl>
 php vendor/rafafortes/cache-warmer/src/UrlFetcher.php https://example.com https://example.com/sitemap.xml
 ```
 
+### Debug Mode
+You can enable debug mode by adding the `--debug` parameter to the command. This mode outputs all URLs found on each accessed page.
+
+**Example:**
+```bash
+php vendor/rafafortes/cache-warmer/src/UrlFetcher.php https://example.com https://example.com/sitemap.xml --debug
+```
+
+### Blacklist Configuration
+You can exclude specific URLs by adding patterns to a file named `blacklist` located in the same directory as the script. Each line of the file should contain a pattern to be ignored.
+
+**Example `blacklist` file:**
+```
+productalert/add
+checkout/cart
+customer/account
+```
+
+The script will automatically load and apply the blacklist, skipping any URLs that contain the specified patterns.
+
 ### Output
 The script will output information about each processed URL, including:
 
@@ -55,6 +77,8 @@ The script will output information about each processed URL, including:
 - HTTP response code
 - Total number of URLs processed
 - Execution time
+- Number of skipped duplicate URLs
+- URLs skipped due to blacklist rules (if any)
 
 ## Requirements
 - PHP 8.0 or higher
@@ -69,6 +93,7 @@ Ensure your project follows the correct directory structure for autoloading:
 ├── composer.json
 ├── src
 │   └── UrlFetcher.php
+├── blacklist
 └── README.md
 ```
 
@@ -80,4 +105,3 @@ This project is licensed under the MIT License.
 
 ## Author
 Developed by [Rafa Fortes](https://github.com/rafafortes).
-

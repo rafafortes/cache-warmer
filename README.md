@@ -3,13 +3,14 @@
 Cache Warmer is a PHP tool designed to crawl and cache all internal URLs of a Magento 2 store to improve page load speeds by preloading content into Varnish cache.
 
 ## Features
-- Crawls all internal URLs starting from the homepage.
+- Crawls all internal URLs starting from the homepage or URLs specified in the `urls` file.
 - Extracts URLs from the store's `sitemap.xml`.
 - Handles URL normalization and parameter variations.
 - Skips unwanted file types (e.g., images, PDFs).
 - Skips URLs based on a blacklist file with customizable patterns.
 - Displays real-time processing details such as response codes and load times.
 - Shows time in milliseconds for each URL loaded.
+- Prevents duplicate URL processing.
 - **Multi-threading:** Supports parallel processing of URLs to speed up the crawling process.
 - **Debug mode:** Outputs all links found on each accessed page.
 
@@ -46,10 +47,14 @@ Once installed, you can run the script from the command line:
 php vendor/rafafortes/cache-warmer/src/UrlFetcher.php <baseUrl> <sitemapUrl> [--debug] [<threads>]
 ```
 
-**Example:**
+### File-based URL Initialization
+You can specify additional URLs to be crawled by creating a `urls` file in the root directory. This file should list one URL per line. The first URL in the file can also serve as the `baseUrl` if needed.
 
-```bash
-php vendor/rafafortes/cache-warmer/src/UrlFetcher.php https://example.com https://example.com/sitemap.xml
+**Example `urls` file:**
+```
+https://example.com
+https://example.com/page1
+https://example.com/page2
 ```
 
 ### Multi-threading
@@ -106,6 +111,7 @@ Ensure your project follows the correct directory structure for autoloading:
 ├── src
 │   └── UrlFetcher.php
 ├── blacklist
+├── urls
 └── README.md
 ```
 

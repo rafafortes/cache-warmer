@@ -21,6 +21,7 @@ class UrlFetcher {
         $this->debugMode = $debugMode;
         $this->maxThreads = $maxThreads;
         $this->loadBlacklist();
+        $this->loadInitialUrls();
     }
 
     private function loadBlacklist(): void {
@@ -33,8 +34,19 @@ class UrlFetcher {
         }
     }
 
+    private function loadInitialUrls(): void {
+        $urlsFile = __DIR__ . '/urls';
+        if (file_exists($urlsFile)) {
+            $urls = array_filter(array_map('trim', file($urlsFile)));
+            $this->internalUrls = array_merge([$this->baseUrl], $urls);
+            echo "Loaded " . count($urls) . " additional URLs from 'urls' file.\n";
+        } else {
+            echo "The 'urls' file was not found. Proceeding with only the base URL.\n";
+            $this->internalUrls[] = $this->baseUrl;
+        }
+    }
+
     public function getInternalUrls(): array {
-        $this->internalUrls[] = $this->baseUrl;
         $this->fetchSitemapUrls();
 
         while (!empty($this->internalUrls)) {
@@ -42,7 +54,7 @@ class UrlFetcher {
             $this->fetchMultipleUrls($batch);
         }
 
-        return $this->internalUrls;
+        return $this->visitedUrls;
     }
 
     private function fetchSitemapUrls(): void {
@@ -50,7 +62,7 @@ class UrlFetcher {
         if ($sitemapContent) {
             $xml = simplexml_load_string($sitemapContent);
             foreach ($xml->url as $url) {
-                $this->internalUrls[] = (string)$url->loc;
+                $this->addToQueue((string)$url->loc);
             }
         }
     }
@@ -74,7 +86,8 @@ class UrlFetcher {
         $startTimes = [];
 
         foreach ($urls as $url) {
-            if ($this->shouldSkipUrl($url) || $this->isBlacklisted($url)) {
+            if ($this->shouldSkipUrl($url) || $this->isBlacklisted($url) || in_array($url, $this->visitedUrls)) {
+                $this->skippedUrls[] = $url;
                 echo "Skipping URL: $url\n";
                 continue;
             }
@@ -103,7 +116,10 @@ class UrlFetcher {
             $this->qtyUrls++;
 
             if ($response && $httpCode === 200) {
+                $this->visitedUrls[] = $url;
                 $this->extractUrlsFromContent($url, $response);
+            } else {
+                $this->skippedUrls[] = $url;
             }
 
             curl_multi_remove_handle($multiHandle, $ch);
@@ -122,17 +138,17 @@ class UrlFetcher {
 
         foreach ($matches[1] as $foundUrl) {
             $foundUrl = html_entity_decode($foundUrl, ENT_QUOTES, 'UTF-8');
-            $parsedUrl = parse_url($foundUrl);
-            $parsedBaseUrl = parse_url($this->baseUrl);
+            $this->addToQueue($foundUrl);
+        }
+    }
 
-            if (!isset($parsedUrl['host'])) {
-                $foundUrl = rtrim($this->baseUrl, '/') . '/' . ltrim($foundUrl, '/');
-            } elseif ($parsedUrl['host'] !== $parsedBaseUrl['host']) {
-                continue;
-            }
+    private function addToQueue(string $url): void {
+        $parsedBaseUrl = parse_url($this->baseUrl);
+        $parsedUrl = parse_url($url);
 
-            if (!in_array($foundUrl, $this->internalUrls) && !$this->isBlacklisted($foundUrl)) {
-                $this->internalUrls[] = $foundUrl;
+        if (!isset($parsedUrl['host']) || $parsedUrl['host'] === $parsedBaseUrl['host']) {
+            if (!in_array($url, $this->visitedUrls) && !in_array($url, $this->internalUrls) && !$this->isBlacklisted($url)) {
+                $this->internalUrls[] = $url;
             }
         }
     }

@@ -9,6 +9,8 @@ Cache Warmer is a PHP tool designed to crawl and cache all internal URLs of a Ma
 - Skips unwanted file types (e.g., images, PDFs).
 - Skips URLs based on a blacklist file with customizable patterns.
 - Displays real-time processing details such as response codes and load times.
+- Shows time in milliseconds for each URL loaded.
+- **Multi-threading:** Supports parallel processing of URLs to speed up the crawling process.
 - **Debug mode:** Outputs all links found on each accessed page.
 
 ## Installation
@@ -41,7 +43,7 @@ composer install
 Once installed, you can run the script from the command line:
 
 ```bash
-php vendor/rafafortes/cache-warmer/src/UrlFetcher.php <baseUrl> <sitemapUrl> [--debug]
+php vendor/rafafortes/cache-warmer/src/UrlFetcher.php <baseUrl> <sitemapUrl> [--debug] [<threads>]
 ```
 
 **Example:**
@@ -49,6 +51,16 @@ php vendor/rafafortes/cache-warmer/src/UrlFetcher.php <baseUrl> <sitemapUrl> [--
 ```bash
 php vendor/rafafortes/cache-warmer/src/UrlFetcher.php https://example.com https://example.com/sitemap.xml
 ```
+
+### Multi-threading
+You can specify the number of threads to process URLs in parallel by adding the number as the last parameter.
+
+**Example with 5 threads:**
+```bash
+php vendor/rafafortes/cache-warmer/src/UrlFetcher.php https://example.com https://example.com/sitemap.xml --debug 5
+```
+
+If the number of threads is not specified, the default is 1 thread.
 
 ### Debug Mode
 You can enable debug mode by adding the `--debug` parameter to the command. This mode outputs all URLs found on each accessed page.
@@ -73,7 +85,7 @@ The script will automatically load and apply the blacklist, skipping any URLs th
 ### Output
 The script will output information about each processed URL, including:
 
-- Loading time
+- Loading time (in milliseconds)
 - HTTP response code
 - Total number of URLs processed
 - Execution time

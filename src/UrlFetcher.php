@@ -12,11 +12,14 @@ class UrlFetcher {
     private string $baseUrl;
     private string $sitemapUrl;
     private bool $debugMode;
+    private int $maxThreads;
+    private int $qtyUrls = 0;
 
-    public function __construct(string $baseUrl, string $sitemapUrl, bool $debugMode = false) {
+    public function __construct(string $baseUrl, string $sitemapUrl, bool $debugMode = false, int $maxThreads = 1) {
         $this->baseUrl = $baseUrl;
         $this->sitemapUrl = $sitemapUrl;
         $this->debugMode = $debugMode;
+        $this->maxThreads = $maxThreads;
         $this->loadBlacklist();
     }
 
@@ -33,32 +36,10 @@ class UrlFetcher {
     public function getInternalUrls(): array {
         $this->internalUrls[] = $this->baseUrl;
         $this->fetchSitemapUrls();
-        $qtyUrls = 0;
 
         while (!empty($this->internalUrls)) {
-            $currentUrl = array_shift($this->internalUrls);
-
-            if ($this->shouldSkipUrl($currentUrl)) {
-                echo "Skipping file URL: $currentUrl\n";
-                continue;
-            }
-
-            if ($this->isBlacklisted($currentUrl)) {
-                echo "Skipping blacklisted URL: $currentUrl\n";
-                continue;
-            }
-
-            $normalizedUrl = parse_url($currentUrl, PHP_URL_PATH) . '?' . (parse_url($currentUrl, PHP_URL_QUERY) ?? '');
-            if (in_array($normalizedUrl, $this->visitedUrls)) {
-                $this->skippedUrls[] = $currentUrl;
-                continue;
-            }
-            $this->visitedUrls[] = $normalizedUrl;
-
-            echo "Loading URL #".$qtyUrls.": $currentUrl\n";
-            $qtyUrls++;
-
-            $this->fetchUrlContent($currentUrl);
+            $batch = array_splice($this->internalUrls, 0, $this->maxThreads);
+            $this->fetchMultipleUrls($batch);
         }
 
         return $this->internalUrls;
@@ -87,36 +68,56 @@ class UrlFetcher {
         return false;
     }
 
-    private function fetchUrlContent(string $url): void {
-        $startTime = microtime(true);
+    private function fetchMultipleUrls(array $urls): void {
+        $multiHandle = curl_multi_init();
+        $curlHandles = [];
+        $startTimes = [];
 
-        $context = stream_context_create([
-            'http' => [
-                'ignore_errors' => true,
-                'timeout' => 10,
-            ],
-            'ssl' => [
-                'verify_peer' => false,
-                'verify_peer_name' => false,
-            ]
-        ]);
+        foreach ($urls as $url) {
+            if ($this->shouldSkipUrl($url) || $this->isBlacklisted($url)) {
+                echo "Skipping URL: $url\n";
+                continue;
+            }
 
-        $html = @file_get_contents($url, false, $context);
-
-        $endTime = microtime(true);
-        $elapsedTime = round(($endTime - $startTime) * 1000, 2);
-
-        $responseCode = isset($http_response_header[0]) ? $http_response_header[0] : 'No response';
-        echo "Response: $responseCode | Time: {$elapsedTime}ms\n";
-
-        if ($html === false) {
-            return;
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+            curl_multi_add_handle($multiHandle, $ch);
+            $curlHandles[$url] = $ch;
+            $startTimes[$url] = microtime(true);
         }
 
+        do {
+            $status = curl_multi_exec($multiHandle, $active);
+            curl_multi_select($multiHandle);
+        } while ($active && $status == CURLM_OK);
+
+        foreach ($curlHandles as $url => $ch) {
+            $response = curl_multi_getcontent($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $endTime = microtime(true);
+            $elapsedTime = round(($endTime - $startTimes[$url]) * 1000, 2);
+
+            echo "Loading URL #{$this->qtyUrls}: $url | Response Code: $httpCode | Time: {$elapsedTime}ms\n";
+            $this->qtyUrls++;
+
+            if ($response && $httpCode === 200) {
+                $this->extractUrlsFromContent($url, $response);
+            }
+
+            curl_multi_remove_handle($multiHandle, $ch);
+            curl_close($ch);
+        }
+
+        curl_multi_close($multiHandle);
+    }
+
+    private function extractUrlsFromContent(string $sourceUrl, string $html): void {
         preg_match_all('/<a\s+href=["\']([^"\']+)["\']/i', $html, $matches);
 
         if ($this->debugMode) {
-            $this->debugInfo[$url] = $matches[1];
+            $this->debugInfo[$sourceUrl] = $matches[1];
         }
 
         foreach ($matches[1] as $foundUrl) {
@@ -146,16 +147,17 @@ class UrlFetcher {
 }
 
 if ($argc < 3) {
-    die("Usage: php UrlFetcher.php <baseUrl> <sitemapUrl> [--debug]\n");
+    die("Usage: php UrlFetcher.php <baseUrl> <sitemapUrl> [--debug] [<threads>]\n");
 }
 
 $startScriptTime = microtime(true);
 
 $baseUrl = $argv[1];
 $sitemapUrl = $argv[2];
-$debugMode = isset($argv[3]) && $argv[3] === '--debug';
+$debugMode = in_array('--debug', $argv);
+$threads = $argc > 4 ? (int)$argv[4] : 1;
 
-$urlFetcher = new UrlFetcher($baseUrl, $sitemapUrl, $debugMode);
+$urlFetcher = new UrlFetcher($baseUrl, $sitemapUrl, $debugMode, $threads);
 $urls = $urlFetcher->getInternalUrls();
 
 // Display found URLs

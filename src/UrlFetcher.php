@@ -9,19 +9,19 @@ class UrlFetcher {
     private array $skippedUrls = [];
     private array $debugInfo = [];
     private array $blacklistPatterns = [];
-    private string $baseUrl;
+    private array $allowedHosts = [];
     private string $sitemapUrl;
     private bool $debugMode;
     private int $maxThreads;
     private int $qtyUrls = 0;
 
     public function __construct(string $baseUrl, string $sitemapUrl, bool $debugMode = false, int $maxThreads = 1) {
-        $this->baseUrl = $baseUrl;
         $this->sitemapUrl = $sitemapUrl;
         $this->debugMode = $debugMode;
         $this->maxThreads = $maxThreads;
+
         $this->loadBlacklist();
-        $this->loadInitialUrls();
+        $this->loadInitialUrls($baseUrl);
     }
 
     private function loadBlacklist(): void {
@@ -34,16 +34,29 @@ class UrlFetcher {
         }
     }
 
-    private function loadInitialUrls(): void {
+    private function loadInitialUrls(string $baseUrl): void {
         $urlsFile = __DIR__ . '/urls';
+
+        $this->internalUrls[] = $baseUrl;
+        $this->allowedHosts[] = parse_url($baseUrl, PHP_URL_HOST);
+
         if (file_exists($urlsFile)) {
             $urls = array_filter(array_map('trim', file($urlsFile)));
-            $this->internalUrls = array_merge([$this->baseUrl], $urls);
+
+            foreach ($urls as $url) {
+                $this->internalUrls[] = $url;
+                $host = parse_url($url, PHP_URL_HOST);
+                if ($host) {
+                    $this->allowedHosts[] = $host;
+                }
+            }
+
             echo "Loaded " . count($urls) . " additional URLs from 'urls' file.\n";
         } else {
             echo "The 'urls' file was not found. Proceeding with only the base URL.\n";
-            $this->internalUrls[] = $this->baseUrl;
         }
+
+        $this->allowedHosts = array_unique($this->allowedHosts);
     }
 
     public function getInternalUrls(): array {
@@ -86,7 +99,9 @@ class UrlFetcher {
         $startTimes = [];
 
         foreach ($urls as $url) {
-            if ($this->shouldSkipUrl($url) || $this->isBlacklisted($url) || in_array($url, $this->visitedUrls)) {
+            $host = parse_url($url, PHP_URL_HOST);
+
+            if ($this->shouldSkipUrl($url) || $this->isBlacklisted($url) || in_array($url, $this->visitedUrls) || !in_array($host, $this->allowedHosts)) {
                 $this->skippedUrls[] = $url;
                 echo "Skipping URL: $url\n";
                 continue;
@@ -143,13 +158,10 @@ class UrlFetcher {
     }
 
     private function addToQueue(string $url): void {
-        $parsedBaseUrl = parse_url($this->baseUrl);
-        $parsedUrl = parse_url($url);
+        $host = parse_url($url, PHP_URL_HOST);
 
-        if (!isset($parsedUrl['host']) || $parsedUrl['host'] === $parsedBaseUrl['host']) {
-            if (!in_array($url, $this->visitedUrls) && !in_array($url, $this->internalUrls) && !$this->isBlacklisted($url)) {
-                $this->internalUrls[] = $url;
-            }
+        if ($host && in_array($host, $this->allowedHosts) && !in_array($url, $this->visitedUrls) && !in_array($url, $this->internalUrls)) {
+            $this->internalUrls[] = $url;
         }
     }
 
